@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaflet Altitude Filter Map (Minimum Altitude)</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      padding: 1rem;
+      background: #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 0.5rem;
+    }
+    #altValue {
+      font-weight: bold;
+      margin-left: 0.5rem;
+    }
+    #map {
+      flex: 1;
+    }
+    .label-text {
+      background: white;
+      border-radius: 4px;
+      padding: 2px 4px;
+      font-size: 12px;
+      border: 1px solid #ccc;
+      white-space: nowrap;
+      pointer-events: none; /* allow map interactions through labels */
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <label for="altSlider">Fog Altitude:</label>
+      <input type="range" id="altSlider" min="450" max="4000" value="800" />
+      <span id="altValue">0 m</span>
+    </div>
+  </header>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script type="module">
+    const map = L.map('map').setView([47.3, 8.54], 10); // Center on Switzerland
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    const slider = document.getElementById('altSlider');
+    const altValue = document.getElementById('altValue');
+    let allMarkers = [];
+
+    async function loadPoints() {
+      try {
+        const response = await fetch('nebbia.json');
+        if (!response.ok) throw new Error('Network error');
+        const json = await response.json();
+
+        // Ensure data is an array
+        const data = Array.isArray(json) ? json : Object.values(json);
+
+        
+        allMarkers = data.map((item) => {
+          if (
+            typeof item.lat !== 'number' ||
+            typeof item.lon !== 'number' ||
+            typeof item.elevation !== 'number'
+          ){
+          alert("data not ok: " + JSON.stringify(item));
+           return null;
+           }
+          const baseMarker = L.marker([item.lat, item.lon]);
+          const label = L.divIcon({
+            className: 'label-text',
+            html: `${item.name ?? 'Unknown'}`,
+            iconSize: null,
+          });
+          const labelMarker = L.marker([item.lat, item.lon], { icon: label });
+
+          labelMarker.on('click', () => {
+              const gmapsUrl =
+              `https://www.google.com/maps?q=${item.lat},${item.lon}`;
+              window.open(gmapsUrl, '_blank');
+            });
+
+          return {
+            elevation: item.elevation,
+            marker: baseMarker,
+            labelMarker,
+          };
+        }).filter(Boolean);
+
+        updateMarkers();
+      } catch (err) {
+        console.error('Error loading or parsing JSON:', err);
+      }
+    }
+
+    function updateMarkers() {
+      const minAlt = Number(slider.value);
+      altValue.textContent = `${minAlt} m`;
+
+      // Remove all existing markers
+      allMarkers.forEach(({ marker, labelMarker }) => {
+        map.removeLayer(marker);
+        map.removeLayer(labelMarker);
+      });
+
+      // Add only markers with elevation >= minAlt
+      allMarkers
+        .filter(({ elevation }) => elevation >= minAlt)
+        .forEach(({ marker, labelMarker }) => {
+          marker.addTo(map);
+          labelMarker.addTo(map);
+        });
+    }
+
+    slider.addEventListener('input', updateMarkers);
+    loadPoints();
+  </script>
+</body>
+</html>
